@@ -19,10 +19,10 @@
 /* $Revision: 1.5.6.2 $ */
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h> /* Needed for the ceil() prototype */
-#include "foreach.h"
+#include <string.h>
+#include <errno.h>
 #include "mex.h"
-
+#include "math.h"
 /* If you are using a compiler that equates NaN to be zero, you must
  * compile this example using the flag  -DNAN_EQUALS_ZERO. For example:
  *
@@ -36,7 +36,9 @@
 #else
 #define IsNonZero(d) ((d)!=0.0)
 #endif
-int nrow = 1200000 ,initnnz = 13000, ncol = 0,allnnz = 0, maxnnz = 0;
+
+#define _myopen(f) ((*(f)==0)?stdin:(*(f)=='<')?popen((f)+1,"r"):fopen((f),"r"))
+#define _myclose(f,fp) ((*(f)==0)?0:(*(f)=='<')?pclose(fp):fclose(fp))
 
 typedef struct Instance{
      int idx;
@@ -48,6 +50,8 @@ typedef struct _Row{
      Ins * neigs;
 } * Row;
 
+int nrow = 1200000 ,initnnz = 13000, ncol = 0,allnnz = 0, maxnnz = 0;
+Row * data = NULL;
 int comp(const void * a, const void * b){
      Ins *A = (Ins*) a;
      Ins *B = (Ins*) b;
@@ -56,54 +60,64 @@ int comp(const void * a, const void * b){
      return 0;
 }
 
-Row * sparse_data_to_array(char * fname){ 
-     Row * data; 
-     data  = (Row*) calloc(nrow, sizeof(Row));
-     int ri = 0;
-     for(int i = 0 ; i < nrow; i++){
-          data[i] = (Row) malloc(sizeof(struct _Row));
-          data[i]->neigs = (Ins*) malloc(initnnz * sizeof(Ins));    
-     }
-     foreach_line(str, fname){
-          int ti = 0, rowid = 0, nnz = 0;
-          if(ri % 100 == 0)
-               mexPrintf(".");
-          //          data[ri] = (Row) malloc(sizeof(struct _Row));
-          //data[ri]->neigs = (Ins*) malloc(initnnz * sizeof(Ins));
-          int nn;
-          foreach_token(tok, str){ /*each token*/
-               double dd;
-               if(ti == 0) rowid = atoi(tok);
-               else if(ti % 2 == 1) nn = atoi(tok);
-               else if(ti % 2 == 0){
-                    if(maxnnz != 0 && nnz >= maxnnz)
-                         break;
-                    dd = atof(tok);
-                    (data[ri]->neigs[nnz]).idx = nn;
-                    (data[ri]->neigs[nnz]).val = atof(tok);            
-                    if(nn > ncol) ncol = nn;               
-                    nnz++;
-                    allnnz++;
+void sparse_data_to_array(char * fname){ 
+     FILE *_fp;
+     int i,ri = 0;
+     char *_ptr, *tok;     
+     data  = (Row*) mxMalloc(nrow * sizeof(Row));
+     /* for(i = 0 ; i < nrow; i++){  */
+     /*      data[i] = (Row) mxMalloc(sizeof(struct _Row));  */
+     /*      data[i]->neigs = (Ins*) mxMalloc(initnnz * sizeof(Ins));     */
+     /* }  */
+     errno = 0;
+     for (_fp = _myopen(fname);                                         \
+          (_fp != NULL) || (errno && (perror(fname), exit(errno), 0));  \
+          _fp = (_myclose(fname, _fp), NULL)){
+          char str[3000000];
+          for (;                                          \
+               ((str[3000000 - 1] = -1) &&                              \
+                    fgets(str, 3000000, _fp) &&                            \
+                    ((str[3000000 - 1] != 0) ||                            \
+                         (perror("Line too long"), exit(-1), 0))); ){
+               data[ri] = (Row) mxMalloc(sizeof(struct _Row)); 
+               data[ri]->neigs = (Ins*) mxMalloc(initnnz * sizeof(Ins));    
+               int ti = 0, rowid = 0, nnz = 0, nn;
+               if(ri % 100 == 0)
+                    mexPrintf(".");
+               for (_ptr = NULL, tok = strtok_r(str, " \t\n\r\f\v", &_ptr); \
+                    tok != NULL; tok = strtok_r(NULL," \t\n\r\f\v", &_ptr)){
+                    double dd;
+                    if(ti == 0) rowid = atoi(tok);
+                    else if(ti % 2 == 1) nn = atoi(tok);
+                    else if(ti % 2 == 0){
+                         if(maxnnz != 0 && nnz >= maxnnz)
+                              break;
+                         dd = atof(tok);
+                         (data[ri]->neigs[nnz]).idx = nn;
+                         (data[ri]->neigs[nnz]).val = atof(tok);            
+                         if(nn > ncol) ncol = nn;               
+                         nnz++;
+                         allnnz++;
+                    }
+                    ti++;
                }
-               ti++;
+               data[ri]->nnz = nnz;
+               /*Matlab expects sorted non-zero indexes*/
+               qsort(data[ri]->neigs, data[ri]->nnz, sizeof(Ins), comp);
+               ri++;
           }
-          data[ri]->nnz = nnz;
-          /*Matlab expects sorted non-zero indexes*/
-          qsort(data[ri]->neigs, data[ri]->nnz, sizeof(Ins), comp);
-          ri++;
-     } 
-     for(int i = ri; i < nrow ; i++){
-          free(data[i]->neigs);
      }
+     /* for(i = ri; i < nrow ; i++){ */
+     /*      if(data[i]->neigs != NULL) */
+     /*           free(data[i]->neigs); */
+     /* } */
      nrow = ri;     
-     ncol = ncol + 1;
-
-     return data;
+     ncol = ncol + 1;     
 }
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
      mwSize m,n, nzmax;
-     mwIndex *irs,*jcs,j,k;
+     mwIndex *irs,*jcs,i,j,k;
      double *sr, percent_sparse;
      char *buf;
      int buflen;
@@ -125,9 +139,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
      buf = mxMalloc(buflen);
      mxGetString(prhs[0],buf,buflen);
      mexPrintf("fname:%s\n",buf);
-     //     Row * data = read_sparse_binary_data_to_array(buf, &nrow, &ncol, &nnz);
-     Row * data = sparse_data_to_array(buf);
-     //     print_data(data);     
+     sparse_data_to_array(buf);
      percent_sparse = (double)allnnz/nrow;
      mexPrintf("row:%d col:%d nnz:%d(%g)\n",nrow,ncol,allnnz, percent_sparse);
      nzmax=(mwSize)allnnz+1;
@@ -144,7 +156,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
           if (k>=nzmax){
                mexPrintf("More elements than memory:max:%d k:%d\n",(int)nzmax,(int)k);
           }
-          for (int i=0; (i< data[j]->nnz); i++) {
+          for (i=0; (i< data[j]->nnz); i++) {
                sr[k] = (data[j]->neigs[i]).val; 
                irs[k] = (data[j]->neigs[i]).idx; 
                k++;                
