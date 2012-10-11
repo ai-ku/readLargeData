@@ -1,22 +1,16 @@
 /*=================================================================
- * fulltosparse.c
- * This example demonstrates how to populate a sparse
- * matrix.  For the purpose of this example, you must pass in a
- * non-sparse 2-dimensional argument of type double.
-
- * Comment: You might want to modify this MEX-file so that you can use
- * it to read large sparse data sets into MATLAB.
- *
- * This is a MEX-file for MATLAB.  
- * Copyright 1984-2006 The MathWorks, Inc.
- * All rights reserved.
+ * readsparse.c
+ * This code reads the sparse input files into the sparse matrix format
+ * Input:
+ * [number_of_points] [p1.idx] [p1.val] [p2.idx] [p2.val]...[pn.idx] [pn.val]
+ * Maximum readable matrix : 1.2Mx80K entries
+ * This is a MEX-file for MATLAB based on the examples provided at MATLAB website.
  *
  * Use with:
- * ~/matlabtools/../.matlab/R2010b/mexopts.sh
+ * ~/matlabtools/../.matlab/R2011b/mexopts.sh
  * to compile: mex readsparse.c -largeArrayDims
  *=================================================================*/
 
-/* $Revision: 1.5.6.2 $ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
