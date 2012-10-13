@@ -33,7 +33,7 @@
 
 #define _myopen(f) ((*(f)==0)?stdin:(*(f)=='<')?popen((f)+1,"r"):fopen((f),"r"))
 #define _myclose(f,fp) ((*(f)==0)?0:(*(f)=='<')?pclose(fp):fclose(fp))
-
+#define PSEUDOZERO 10e-8;
 typedef struct Instance{
      int idx;
      double val;
@@ -88,7 +88,8 @@ void sparse_data_to_array(char * fname){
                               break;
                          dd = atof(tok);
                          (data[ri]->neigs[nnz]).idx = nn;
-                         (data[ri]->neigs[nnz]).val = atof(tok);            
+                         if (dd == 0) dd = PSEUDOZERO;
+                         (data[ri]->neigs[nnz]).val = dd;
                          if(nn > ncol) ncol = nn;               
                          nnz++;
                          allnnz++;
