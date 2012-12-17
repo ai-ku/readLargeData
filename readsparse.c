@@ -130,7 +130,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
      if(nlhs > 1){
           mexErrMsgTxt("Too many output arguments.");
      }     
-     buflen = mxGetN(prhs[0])*sizeof(mxChar)+1;
+     buflen = mxGetN(prhs[0])*sizeof(mxChar)+10;
      buf = mxMalloc(buflen);
      mxGetString(prhs[0],buf,buflen);
      mexPrintf("fname:%s\n",buf);
@@ -160,6 +160,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
           mxFree(data[j]);
      }
      mxFree(data);
+     mxFree(buf);
      jcs[m] = k;
      mexPrintf("allnnz:%d\n",(int)k);
      return;
